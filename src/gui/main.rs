@@ -17,9 +17,11 @@
 
 use std::fs;
 
+use file_chest::get_notes;
+
 use iced::theme::Theme;
-use iced::widget::{text, button, column, container, horizontal_rule, row, scrollable, text_input, vertical_space,};
-use iced::{Element, Length, Sandbox, Settings};
+use iced::widget::{text, button, toggler, column, container, horizontal_rule, row, scrollable, text_input, radio,};
+use iced::{Alignment, Element, Length, Sandbox, Settings};
 
 /*
 * This gui is evolved from the "styling" example on the iced github.
@@ -35,19 +37,23 @@ struct ChestApp {
     theme: Theme,
     input_value: String,
 	search_dir: String,
+	selected_file: usize,
+	show_hidden: bool,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     InputChanged(String),
     DirSubmit,
+	DoShowHidden(bool),
+	FileSelected(usize),
 }
 
 impl Sandbox for ChestApp {
     type Message = Message;
 
     fn new() -> Self {
-        ChestApp {theme: Theme::Light, input_value: String::from(""), search_dir: String::from("./")}
+        ChestApp {theme: Theme::Light, input_value: String::from(""), search_dir: String::from("./"), selected_file: 0, show_hidden: false}
     }
 
     fn title(&self) -> String {
@@ -57,7 +63,15 @@ impl Sandbox for ChestApp {
     fn update(&mut self, message: Message) {
         match message {
             Message::InputChanged(value) => self.input_value = value,
-            Message::DirSubmit => self.search_dir = self.input_value.clone(),
+            Message::DirSubmit => {
+				self.search_dir = self.input_value.clone();
+				self.selected_file = 0;
+			},
+			Message::DoShowHidden(b) => {
+				self.show_hidden = b;
+				self. selected_file = 0;
+			},
+			Message::FileSelected(i) => self.selected_file = i,
         }
     }
 
@@ -75,32 +89,57 @@ impl Sandbox for ChestApp {
             .padding(10)
             .on_press(Message::DirSubmit);
 
-		let mut files = column![];
+        let toggler_hidden = toggler(
+            String::from("Show Hidden Files"),
+            self.show_hidden,
+            Message::DoShowHidden,
+        )
+        .width(Length::Shrink)
+        .spacing(10);
+
+		let mut files = column![].spacing(10).width(Length::Fill);
 
 		let paths = fs::read_dir(&self.search_dir).unwrap();
-		for path in paths {
-			files = files.push(text(format!("{}", path.unwrap().path().display())));
+    	let mut paths_vec: Vec<_> = vec![];
+		for p in paths {
+			let file = p.unwrap();
+			if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
+				paths_vec.push(file);
+			}
+		}
+		paths_vec.sort_by_key(|dir| dir.path());
+
+		for (i, path) in paths_vec.iter().enumerate() {
+			files = files.push(radio(
+				path.file_name().into_string().unwrap(),
+				i,
+				Some(self.selected_file),
+				Message::FileSelected,
+			));
 		};
 
-        let scrollable = scrollable(
-            column![
-                "Scroll me!\nLineTest\nLine3Test\nAnotherOne",
-                vertical_space(Length::Units(1000)),
-                "Test"
-            ]
-            .width(Length::Fill),
+		let files_disp = scrollable(
+			files,
+		);
+
+		let mut file_notes = text("");
+		if !paths_vec.is_empty() {
+			file_notes = text(get_notes(&paths_vec[self.selected_file].path().display().to_string()).expect("Selected file should exist"))
+		}
+        let annotation_disp = scrollable(
+			file_notes
         );
 
         let content = column![
-            row![text_input, button].spacing(10),
+            row![text_input, button, toggler_hidden].spacing(10).align_items(Alignment::Center),
 			row![
 				column![
 					horizontal_rule(10),
-					files
-	     		].spacing(20).max_width(300),
+					files_disp	
+	     		].spacing(20).max_width(400),
 				column![
 					horizontal_rule(10),
-					scrollable,
+					annotation_disp,
 					].spacing(20),
 				].spacing(10),
 			].spacing(10).padding(20);

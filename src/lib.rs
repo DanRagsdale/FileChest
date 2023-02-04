@@ -14,3 +14,28 @@
  * this program; if not, write to the Free Software Foundation, Inc., 59 Temple
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
+use std::fs;
+use std::io::ErrorKind;
+use dirs::home_dir;
+
+
+
+const NOTES_DIR: &str = ".filechest";
+
+pub fn get_notes(file_path: &str) -> Option<String> {
+	let test_path = home_dir().unwrap().display().to_string() + "/" + NOTES_DIR;
+	let dir_create = fs::create_dir(test_path);
+	match dir_create {
+		Ok(_) => (),
+		Err(error) => if error.kind() !=  ErrorKind::AlreadyExists {
+			println!("{:?}", error);
+		},
+	};
+
+	if let Ok(c_path) = fs::canonicalize(file_path){
+		//println!("{:?}", c_path);
+		return Some(format!("These are the notes for {}:\n", c_path.display()));
+	}
+	None
+}
