@@ -17,11 +17,19 @@
 
 use std::fs;
 use std::io::ErrorKind;
+use std::path::PathBuf;
+
 use dirs::home_dir;
 
 
 
 const NOTES_DIR: &str = ".filechest";
+
+#[derive(Debug)]
+pub struct FileRef {
+	pub file_path: PathBuf,
+	pub inode: u64,
+}
 
 pub fn get_notes(file_path: &str) -> Option<String> {
 	let test_path = home_dir().unwrap().display().to_string() + "/" + NOTES_DIR;
