@@ -17,10 +17,6 @@ relm4-components = "0.5.0-rc.2"
 relm4-macros = "0.4.4"
 relm-derive = "0.24.0"
 
-iced = "0.7.0"
-iced_lazy = "0.4.0"
-iced_native = "0.8.0"
-
 
 [[bin]]
 name = "file_chest_gtk"
