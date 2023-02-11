@@ -2,27 +2,33 @@
 name = "file-chest"
 version = "0.0.3"
 edition = "2021"
+default-run = "file_chest_gtk"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 dirs = "4.0.0"
 glob = "0.3.1"
-gtk = { version = "0.4.8", package = "gtk4" }
+
+# gtk = { version = "0.4.8", package = "gtk4" }
+relm4 = "0.5.0-rc.2"
+relm4-components = "0.5.0-rc.2"
+
+relm4-macros = "0.4.4"
+relm-derive = "0.24.0"
+
 iced = "0.7.0"
 iced_lazy = "0.4.0"
 iced_native = "0.8.0"
-relm4 = "0.4.4"
-relm4-components = "0.4.4"
-relm4-macros = "0.4.4"
+
 
 [[bin]]
 name = "file_chest_gtk"
 path = "src/gtk/main.rs"
 
-#[[bin]]
-#name = "file_chest_gui"
-#path = "src/gui/main.rs"
+[[bin]]
+name = "file_chest_gui"
+path = "src/gui/main.rs"
 
 [lib]
 name = "file_chest"

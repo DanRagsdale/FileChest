@@ -15,119 +15,228 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-use gtk::prelude::{BoxExt, ButtonExt, CheckButtonExt, GtkWindowExt};
-use relm4::{send, AppUpdate, Model, RelmApp, Sender, WidgetPlus, Widgets};
+/* This GUI is an evolution of the "To Do" example on the relm4 github
+* https://github.com/Relm4/Relm4/blob/main/examples/to_do.rs
+*/
+
+use std::fs;
+use std::path::PathBuf;
+use std::os::unix::prelude::DirEntryExt;
+
+use gtk::prelude::*;
+use relm4::factory::FactoryVecDeque;
+use relm4::prelude::*;
+
+#[derive(Debug)]
+struct FileRef {
+	file_path: PathBuf,
+	inode: u64,
+}
+
+#[derive(Debug)]
+struct Task {
+	file: FileRef,
+    completed: bool,
+}
+
+#[derive(Debug)]
+enum TaskInput {
+    Toggle(bool),
+}
+
+#[derive(Debug)]
+enum TaskOutput {
+    Delete(DynamicIndex),
+}
+
+#[relm4::factory]
+impl FactoryComponent for Task {
+    type Init = FileRef;
+    type Input = TaskInput;
+    type Output = TaskOutput;
+    type CommandOutput = ();
+    type ParentInput = AppMsg;
+    type ParentWidget = gtk::ListBox;
+
+    view! {
+        gtk::Box {
+            set_orientation: gtk::Orientation::Horizontal,
+
+            //gtk::CheckButton {
+            //    set_active: false,
+            //    set_margin_all: 12,
+            //    connect_toggled[sender] => move |checkbox| {
+            //        sender.input(TaskInput::Toggle(checkbox.is_active()));
+            //    }
+            //},
+
+            #[name(label)]
+            gtk::Label {
+                set_label: &self.file.file_path.file_name().unwrap().to_str().unwrap(),
+                set_hexpand: true,
+                set_halign: gtk::Align::Start,
+                set_margin_all: 12,
+            },
+
+            //gtk::Button {
+            //    set_icon_name: "edit-delete",
+            //    set_margin_all: 12,
+
+            //    connect_clicked[sender, index] => move |_| {
+            //        sender.output(TaskOutput::Delete(index.clone()));
+            //    }
+            //}
+        }
+    }
+
+    fn pre_view() {
+        let attrs = widgets.label.attributes().unwrap_or_default();
+        attrs.change(gtk::pango::AttrInt::new_strikethrough(self.completed));
+        widgets.label.set_attributes(Some(&attrs));
+    }
+
+    fn output_to_parent_input(output: Self::Output) -> Option<AppMsg> {
+        Some(match output {
+            TaskOutput::Delete(index) => AppMsg::DeleteEntry(index),
+        })
+    }
+
+    fn init_model(file: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
+        Self {
+			file,
+            completed: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum AppMsg {
+    DeleteEntry(DynamicIndex),
+	DeleteAll,
+    AddDir(String),
+	SelectFile(i32),
+}
 
 struct AppModel {
-    counter: u8,
+    tasks: FactoryVecDeque<Task>,
+	search_dir: String,
 }
 
-enum AppMsg {
-    Increment,
-    Decrement,
-	Toggle(bool),
-}
+#[relm4::component]
+impl SimpleComponent for AppModel {
+    type Init = ();
+    type Input = AppMsg;
+    type Output = ();
 
-impl Model for AppModel {
-    type Msg = AppMsg;
-    type Widgets = AppWidgets;
-    type Components = ();
-}
+    view! {
+        main_window = gtk::ApplicationWindow {
+            set_width_request: 360,
+            set_title: Some("To-Do"),
 
-impl AppUpdate for AppModel {
-    fn update(&mut self, msg: AppMsg, _components: &(), _sender: Sender<AppMsg>) -> bool {
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+                set_margin_all: 12,
+                set_spacing: 6,
+				
+				gtk::Box {
+					set_orientation: gtk::Orientation::Horizontal,
+					set_margin_all: 6,
+					set_spacing: 6,
+
+					gtk::Entry {
+						set_placeholder_text: Some("Enter a directory"),
+						set_hexpand: true,
+					    connect_activate[sender] => move |entry| {
+					        let buffer = entry.buffer();
+					        sender.input(AppMsg::AddDir(buffer.text()));
+					        buffer.delete_text(0, None);
+					    }
+					},
+					
+					gtk::Button {
+						set_icon_name: "edit-delete",
+						set_margin_all: 12,
+
+						connect_clicked[sender] => move |_| {
+							sender.input(AppMsg::DeleteAll);
+						}
+					},
+				},
+
+                gtk::ScrolledWindow {
+                    set_hscrollbar_policy: gtk::PolicyType::Never,
+                    set_min_content_height: 360,
+                    set_vexpand: true,
+
+                    #[local_ref]
+                    task_list_box -> gtk::ListBox {
+						connect_row_selected[sender] => move |_self, opt| {
+							if opt.is_some() {
+								sender.input(AppMsg::SelectFile(opt.unwrap().index()));
+							};
+						},
+					}
+                }
+            }
+
+        }
+    }
+
+    fn update(&mut self, msg: AppMsg, _sender: ComponentSender<Self>) {
         match msg {
-            AppMsg::Increment => {
-                self.counter = self.counter.wrapping_add(1);
+            AppMsg::DeleteEntry(index) => {
+                self.tasks.guard().remove(index.current_index());
             },
-            AppMsg::Decrement => {
-                self.counter = self.counter.wrapping_sub(1);
+            AppMsg::DeleteAll => {
+                self.tasks.guard().clear();
             },
-			AppMsg::Toggle(b) => {
-				println!("Toggled! {b}");
-			},
-        }
-        true
-    }
-}
+            AppMsg::AddDir(name) => {
+				self.search_dir = name.clone();
+				self.tasks.guard().clear();
 
-struct AppWidgets {
-    window: gtk::ApplicationWindow,
-    vbox: gtk::Box,
-    inc_button: gtk::Button,
-    dec_button: gtk::Button,
-    label: gtk::Label,
-}
+				let paths = fs::read_dir(&self.search_dir).unwrap();
+				let mut paths_vec: Vec<_> = vec![];
+				for p in paths {
+					let file = p.unwrap();
+					//if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
+						paths_vec.push(file);
+					//}
+				}
+				paths_vec.sort_by_key(|dir| dir.path());
 
-impl Widgets<AppModel, ()> for AppWidgets {
-    type Root = gtk::ApplicationWindow;
-
-    /// Initialize the UI.
-    fn init_view(model: &AppModel, _parent_widgets: &(), sender: Sender<AppMsg>) -> Self {
-        let window = gtk::ApplicationWindow::builder()
-            .title("Simple app")
-            .default_width(300)
-            .default_height(100)
-            .build();
-        let vbox = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(5)
-            .build();
-        vbox.set_margin_all(5);
-
-        let inc_button = gtk::Button::with_label("Increment");
-        let dec_button = gtk::Button::with_label("Decrement");
-
-        let label = gtk::Label::new(Some(&format!("Counter: {}", model.counter)));
-        label.set_margin_all(5);
-
-        // Connect the widgets
-        window.set_child(Some(&vbox));
-        vbox.append(&inc_button);
-        vbox.append(&dec_button);
-        vbox.append(&label);
-
-		let test = gtk::CheckButton::with_label("Test Label");
-		vbox.append(&test);
-
-        // Connect events
-		let cb_sender = sender.clone();
-        test.connect_toggled(move |t| {
-            send!(cb_sender, AppMsg::Toggle(t.is_active()));
-        });
-
-        let btn_sender = sender.clone();
-        inc_button.connect_clicked(move |_| {
-            send!(btn_sender, AppMsg::Increment);
-        });
-
-        dec_button.connect_clicked(move |_| {
-            send!(sender, AppMsg::Decrement);
-        });
-
-
-        Self {
-            window,
-            vbox,
-            inc_button,
-            dec_button,
-            label,
+				for (_i, file) in paths_vec.iter().enumerate() {
+					let file_path = file.path().clone();
+					let inode = file.ino();
+					let fr = FileRef { file_path, inode, };
+					self.tasks.guard().push_back(fr);
+				};
+            },
+			AppMsg::SelectFile(index) => {
+				let fr =  &self.tasks.get(index as usize).unwrap().file;
+				println!("Printing message for {:?}", fr.file_path);
+				println!("This file has inode: {:?}", fr.inode);
+			}
         }
     }
 
-    /// Return the root widget.
-    fn root_widget(&self) -> Self::Root {
-        self.window.clone()
-    }
+    fn init(_: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
+        let model = AppModel {
+            tasks: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()),
+			search_dir: String::from(""),
+        };
 
-    /// Update the view to represent the updated model.
-    fn view(&mut self, model: &AppModel, _sender: Sender<AppMsg>) {
-        self.label.set_label(&format!("Counter: {}", model.counter));
+        let task_list_box = model.tasks.widget();
+		//task_list_box.connect_row_selected(|_self, _opt| {
+		//	println!("Test, Test, Test");
+		//});
+			
+        let widgets = view_output!();
+
+        ComponentParts { model, widgets }
     }
 }
 
 fn main() {
-    let model = AppModel { counter: 0 };
-    let app = RelmApp::new(model);
-    app.run();
+    let app = RelmApp::new("com.danielragsdale.file_chest");
+    app.run::<AppModel>(());
 }
