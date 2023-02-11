@@ -20,11 +20,7 @@ relm-derive = "0.24.0"
 
 [[bin]]
 name = "file_chest_gtk"
-path = "src/gtk/main.rs"
-
-[[bin]]
-name = "file_chest_gui"
-path = "src/gui/main.rs"
+path = "src/gui_gtk/main.rs"
 
 [lib]
 name = "file_chest"
