@@ -16,12 +16,12 @@
  */
 
 /* This GUI is an evolution of the "To Do" example on the relm4 github
-* https://github.com/Relm4/Relm4/blob/main/examples/to_do.rs
-*/
+ * https://github.com/Relm4/Relm4/blob/main/examples/to_do.rs
+ */
 
 mod gui_model;
 mod messages;
-mod list_element;
+mod file_element;
 
 use crate::gui_model::AppModel;
 use relm4::prelude::*;

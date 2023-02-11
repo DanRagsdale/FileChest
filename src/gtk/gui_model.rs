@@ -1,5 +1,22 @@
+/* Copyright (c) 2023 Daniel Ragsdale <DanJeffRags@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, write to the Free Software Foundation, Inc., 59 Temple
+ * Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
 use crate::messages::*;
-use crate::list_element::*;
+use crate::file_element::*;
 
 use file_chest::FileRef;
 
@@ -11,7 +28,7 @@ use relm4::factory::FactoryVecDeque;
 use relm4::prelude::*;
 
 pub struct AppModel {
-    tasks: FactoryVecDeque<Task>,
+    tasks: FactoryVecDeque<FileElement>,
 	search_dir: String,
 }
 
@@ -77,11 +94,9 @@ impl SimpleComponent for AppModel {
 
     fn update(&mut self, msg: AppMsg, _sender: ComponentSender<Self>) {
         match msg {
-            AppMsg::DeleteEntry(index) => {
-                self.tasks.guard().remove(index.current_index());
-            },
             AppMsg::DeleteAll => {
                 self.tasks.guard().clear();
+				self.search_dir = String::from("");
             },
             AppMsg::AddDir(name) => {
 				self.search_dir = name.clone();
