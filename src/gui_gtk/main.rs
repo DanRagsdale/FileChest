@@ -23,10 +23,14 @@ mod gui_model;
 mod messages;
 mod file_element;
 
+use file_chest::NotesDB;
+
 use crate::gui_model::AppModel;
 use relm4::prelude::*;
 
 fn main() {
     let app = RelmApp::new("com.danielragsdale.file_chest");
-    app.run::<AppModel>(());
+	let db = NotesDB::new().expect("Could not load database");
+
+    app.run::<AppModel>(db);
 }

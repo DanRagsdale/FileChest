@@ -25,5 +25,6 @@ pub enum FileElementOutput {}
 pub enum AppMsg {
 	DeleteAll,
     AddDir(String),
+	SetShowHidden(bool),
 	SelectFile(i32),
 }

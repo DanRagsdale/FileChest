@@ -18,7 +18,8 @@
 use crate::messages::*;
 use crate::file_element::*;
 
-use file_chest::FileRef;
+use file_chest::{FileRef, NotesDB};
+//use file_chest::get_notes;
 
 use std::fs;
 use std::os::unix::prelude::DirEntryExt;
@@ -28,13 +29,16 @@ use relm4::factory::FactoryVecDeque;
 use relm4::prelude::*;
 
 pub struct AppModel {
+	db: NotesDB,
     tasks: FactoryVecDeque<FileElement>,
 	search_dir: String,
+	show_hidden: bool,
+	notes_buffer: gtk::TextBuffer,
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for AppModel {
-    type Init = ();
+    type Init = NotesDB;
     type Input = AppMsg;
     type Output = ();
 
@@ -71,24 +75,58 @@ impl SimpleComponent for AppModel {
 							sender.input(AppMsg::DeleteAll);
 						}
 					},
+
+					gtk::Box {
+						set_orientation: gtk::Orientation::Vertical,
+						set_margin_all: 2,
+						set_spacing: 2,
+
+						gtk::Switch {
+							set_active: model.show_hidden,
+							connect_state_set[sender] => move |_self, do_show| {
+								sender.input(AppMsg::SetShowHidden(do_show));
+								gtk::Inhibit(false)
+							},
+						},
+
+						gtk::Label {
+							set_text: "Show Hidden Files",
+						}
+					}
 				},
 
-                gtk::ScrolledWindow {
-                    set_hscrollbar_policy: gtk::PolicyType::Never,
-                    set_min_content_height: 360,
-                    set_vexpand: true,
+				gtk::Box {
+					set_orientation: gtk::Orientation::Horizontal,
+					set_margin_all: 6,
+					set_spacing: 6,
 
-                    #[local_ref]
-                    task_list_box -> gtk::ListBox {
-						connect_row_selected[sender] => move |_self, opt| {
-							if opt.is_some() {
-								sender.input(AppMsg::SelectFile(opt.unwrap().index()));
-							};
-						},
+					gtk::ScrolledWindow {
+						set_hscrollbar_policy: gtk::PolicyType::Never,
+						set_min_content_height: 360,
+						set_width_request: 200,
+						set_vexpand: true,
+                    
+						#[local_ref]
+						task_list_box -> gtk::ListBox {
+							connect_row_selected[sender] => move |_self, opt| {
+								if opt.is_some() {
+									sender.input(AppMsg::SelectFile(opt.unwrap().index()));
+								};
+							},
+						}
+                	},
+
+					gtk::ScrolledWindow {
+						set_hexpand: true,
+						set_vexpand: true,
+						set_width_request: 300,
+						
+						gtk::TextView {
+							set_buffer: Some(&model.notes_buffer),
+						}
 					}
-                }
+				}
             }
-
         }
     }
 
@@ -100,37 +138,30 @@ impl SimpleComponent for AppModel {
             },
             AppMsg::AddDir(name) => {
 				self.search_dir = name.clone();
-				self.tasks.guard().clear();
-
-				let paths = fs::read_dir(&self.search_dir).unwrap();
-				let mut paths_vec: Vec<_> = vec![];
-				for p in paths {
-					let file = p.unwrap();
-					//if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
-						paths_vec.push(file);
-					//}
-				}
-				paths_vec.sort_by_key(|dir| dir.path());
-
-				for (_i, file) in paths_vec.iter().enumerate() {
-					let file_path = file.path().clone();
-					let inode = file.ino();
-					let fr = FileRef { file_path, inode, };
-					self.tasks.guard().push_back(fr);
-				};
+				self.reload_dir();
             },
+			AppMsg::SetShowHidden(do_show) => {
+				self.show_hidden = do_show;
+				self.reload_dir();
+			},
 			AppMsg::SelectFile(index) => {
 				let fr =  &self.tasks.get(index as usize).unwrap().file;
 				println!("Printing message for {:?}", fr.file_path);
 				println!("This file has inode: {:?}", fr.inode);
+
+				//let test_string = format!("Test! {}", index);
+				self.notes_buffer.set_text(&self.db.get_note(fr).unwrap());
 			}
         }
     }
 
-    fn init(_: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
+    fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
         let model = AppModel {
+			db,
             tasks: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()),
 			search_dir: String::from(""),
+			show_hidden: false,
+			notes_buffer: gtk::TextBuffer::builder().text("Hello World!").build(),
         };
 
         let task_list_box = model.tasks.widget();
@@ -138,4 +169,27 @@ impl SimpleComponent for AppModel {
 
         ComponentParts { model, widgets }
     }
+}
+
+impl AppModel {
+	fn reload_dir(&mut self) {
+		self.tasks.guard().clear();
+
+		let paths = fs::read_dir(&self.search_dir).unwrap();
+		let mut paths_vec: Vec<_> = vec![];
+		for p in paths {
+			let file = p.unwrap();
+			if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
+				paths_vec.push(file);
+			}
+		}
+		paths_vec.sort_by_key(|dir| dir.path());
+
+		for (_i, file) in paths_vec.iter().enumerate() {
+			let file_path = file.path().clone();
+			let inode = file.ino();
+			let fr = FileRef { file_path, inode, };
+			self.tasks.guard().push_back(fr);
+		};
+	}
 }

@@ -21,6 +21,7 @@ use std::path::PathBuf;
 
 use dirs::home_dir;
 
+use rusqlite::{Connection, Result};
 
 
 const NOTES_DIR: &str = ".filechest";
@@ -31,19 +32,43 @@ pub struct FileRef {
 	pub inode: u64,
 }
 
-pub fn get_notes(file_path: &str) -> Option<String> {
-	let test_path = home_dir().unwrap().display().to_string() + "/" + NOTES_DIR;
-	let dir_create = fs::create_dir(test_path);
-	match dir_create {
-		Ok(_) => (),
-		Err(error) => if error.kind() !=  ErrorKind::AlreadyExists {
-			println!("{:?}", error);
-		},
-	};
+pub struct NotesDB {
+	conn: Connection,
+}
 
-	if let Ok(c_path) = fs::canonicalize(file_path){
-		//println!("{:?}", c_path);
-		return Some(format!("These are the notes for {}:\n", c_path.display()));
+impl NotesDB {
+	pub fn new() -> Result<Self> {
+		let conn = Connection::open("test.db")?;
+		conn.execute(
+			"create table if not exists file_notes (
+			     inode integer primary key,
+			     note text
+			)",
+			()
+		)?;
+
+		Ok(NotesDB {
+			conn
+		})
 	}
-	None
+
+	pub fn get_note(&self, file_ref: &FileRef) -> Option<String> {
+		//let test_path = home_dir().unwrap().display().to_string() + "/" + NOTES_DIR;
+		//let dir_create = fs::create_dir(test_path);
+		//match dir_create {
+		//	Ok(_) => (),
+		//	Err(error) => if error.kind() !=  ErrorKind::AlreadyExists {
+		//		println!("{:?}", error);
+		//	},
+		//};
+
+		//if let Ok(c_path) = fs::canonicalize(file_path){
+		//	let inode = file.ino();
+
+		//	//println!("{:?}", c_path);
+		//	return Some(format!("These are the notes for {}:\n", c_path.display()));
+		//}
+		Some(String::from("Test New Thing"))
+		//None
+	}
 }
