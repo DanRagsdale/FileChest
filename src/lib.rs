@@ -16,17 +16,17 @@
  */
 
 use std::fs;
-use std::io::ErrorKind;
+//use std::io::ErrorKind;
 use std::path::PathBuf;
 
-use dirs::home_dir;
+//use dirs::home_dir;
 
 use rusqlite::{Connection, Result};
 
 
 const NOTES_DIR: &str = ".filechest";
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone)]
 pub struct FileRef {
 	pub file_path: PathBuf,
 	pub inode: u64,
@@ -70,5 +70,12 @@ impl NotesDB {
 		//}
 		Some(String::from("Test New Thing"))
 		//None
+	}
+
+	pub fn set_note(&self, file_ref: &FileRef, note: &str) {
+		self.conn.execute(
+        	"INSERT INTO file_notes (inode, note) VALUES (?1, ?2)",
+        	(&file_ref.inode, note),
+    	).expect("Could not submit note.");
 	}
 }

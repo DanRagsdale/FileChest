@@ -27,4 +27,5 @@ pub enum AppMsg {
     AddDir(String),
 	SetShowHidden(bool),
 	SelectFile(i32),
+	SubmitNote,
 }

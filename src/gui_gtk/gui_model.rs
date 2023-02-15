@@ -34,6 +34,7 @@ pub struct AppModel {
 	search_dir: String,
 	show_hidden: bool,
 	notes_buffer: gtk::TextBuffer,
+	current_file: FileRef,
 }
 
 #[relm4::component(pub)]
@@ -115,15 +116,32 @@ impl SimpleComponent for AppModel {
 							},
 						}
                 	},
+					
+					gtk::Box {
+						set_orientation: gtk::Orientation::Vertical,
+						set_margin_all: 6,
+						set_spacing: 6,
 
-					gtk::ScrolledWindow {
-						set_hexpand: true,
-						set_vexpand: true,
-						set_width_request: 300,
-						
-						gtk::TextView {
-							set_buffer: Some(&model.notes_buffer),
-						}
+						gtk::ScrolledWindow {
+							set_hexpand: true,
+							set_vexpand: true,
+							set_width_request: 300,
+
+							gtk::TextView {
+								set_vexpand: true,
+								set_buffer: Some(&model.notes_buffer),
+							},
+						},
+
+						gtk::Button {
+							//set_icon_name: "edit-delete",
+							set_label: "Submit Note",
+							set_margin_all: 12,
+
+							connect_clicked[sender] => move |_| {
+								sender.input(AppMsg::SubmitNote);
+							}
+						},
 					}
 				}
             }
@@ -146,11 +164,17 @@ impl SimpleComponent for AppModel {
 			},
 			AppMsg::SelectFile(index) => {
 				let fr =  &self.tasks.get(index as usize).unwrap().file;
-				println!("Printing message for {:?}", fr.file_path);
 				println!("This file has inode: {:?}", fr.inode);
 
 				//let test_string = format!("Test! {}", index);
 				self.notes_buffer.set_text(&self.db.get_note(fr).unwrap());
+
+				self.current_file = fr.clone();
+			},
+			AppMsg::SubmitNote => {
+				let start = self.notes_buffer.start_iter();
+				let end = self.notes_buffer.end_iter();
+				self.db.set_note(&self.current_file, self.notes_buffer.text(&start, &end, true).as_ref());
 			}
         }
     }
@@ -162,6 +186,7 @@ impl SimpleComponent for AppModel {
 			search_dir: String::from(""),
 			show_hidden: false,
 			notes_buffer: gtk::TextBuffer::builder().text("Hello World!").build(),
+			current_file: FileRef::default(),
         };
 
         let task_list_box = model.tasks.widget();
