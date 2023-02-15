@@ -200,21 +200,23 @@ impl AppModel {
 	fn reload_dir(&mut self) {
 		self.tasks.guard().clear();
 
-		let paths = fs::read_dir(&self.search_dir).unwrap();
-		let mut paths_vec: Vec<_> = vec![];
-		for p in paths {
-			let file = p.unwrap();
-			if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
-				paths_vec.push(file);
+		if let Ok(paths) = fs::read_dir(&self.search_dir)
+		{
+			let mut paths_vec: Vec<_> = vec![];
+			for p in paths {
+				let file = p.unwrap();
+				if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
+					paths_vec.push(file);
+				}
 			}
-		}
-		paths_vec.sort_by_key(|dir| dir.path());
+			paths_vec.sort_by_key(|dir| dir.path());
 
-		for (_i, file) in paths_vec.iter().enumerate() {
-			let file_path = file.path().clone();
-			let inode = file.ino();
-			let fr = FileRef { file_path, inode, };
-			self.tasks.guard().push_back(fr);
-		};
+			for (_i, file) in paths_vec.iter().enumerate() {
+				let file_path = file.path().clone();
+				let inode = file.ino();
+				let fr = FileRef { file_path, inode, };
+				self.tasks.guard().push_back(fr);
+			};
+		}
 	}
 }
