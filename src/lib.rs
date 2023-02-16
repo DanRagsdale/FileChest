@@ -15,7 +15,7 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-use std::fs;
+//use std::fs;
 //use std::io::ErrorKind;
 use std::path::PathBuf;
 
@@ -52,7 +52,7 @@ impl NotesDB {
 		})
 	}
 
-	pub fn get_note(&self, file_ref: &FileRef) -> Option<String> {
+	pub fn get_note(&self, file_ref: &FileRef) -> Result<String, rusqlite::Error> {
 		//let test_path = home_dir().unwrap().display().to_string() + "/" + NOTES_DIR;
 		//let dir_create = fs::create_dir(test_path);
 		//match dir_create {
@@ -68,13 +68,14 @@ impl NotesDB {
 		//	//println!("{:?}", c_path);
 		//	return Some(format!("These are the notes for {}:\n", c_path.display()));
 		//}
-		Some(String::from("Test New Thing"))
-		//None
+		self.conn.query_row("SELECT note FROM file_notes WHERE inode=:inode", &[(":inode", &file_ref.inode.to_string())], |row| {
+			row.get::<usize, String>(0)
+		})
 	}
 
 	pub fn set_note(&self, file_ref: &FileRef, note: &str) {
 		self.conn.execute(
-        	"INSERT INTO file_notes (inode, note) VALUES (?1, ?2)",
+        	"INSERT OR REPLACE INTO file_notes (inode, note) VALUES (?1, ?2)",
         	(&file_ref.inode, note),
     	).expect("Could not submit note.");
 	}

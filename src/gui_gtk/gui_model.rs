@@ -19,7 +19,6 @@ use crate::messages::*;
 use crate::file_element::*;
 
 use file_chest::{FileRef, NotesDB};
-//use file_chest::get_notes;
 
 use std::fs;
 use std::os::unix::prelude::DirEntryExt;
@@ -167,7 +166,14 @@ impl SimpleComponent for AppModel {
 				println!("This file has inode: {:?}", fr.inode);
 
 				//let test_string = format!("Test! {}", index);
-				self.notes_buffer.set_text(&self.db.get_note(fr).unwrap());
+				match self.db.get_note(fr) {
+					Ok(note) => {
+						self.notes_buffer.set_text(&note);
+					},
+					Err(_) => {
+						self.notes_buffer.set_text("Enter a new note!");
+					},
+				};
 
 				self.current_file = fr.clone();
 			},
