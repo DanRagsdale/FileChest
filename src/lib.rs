@@ -17,7 +17,11 @@
 
 //use std::fs;
 //use std::io::ErrorKind;
+use std::fs::DirEntry;
 use std::path::PathBuf;
+
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::DirEntryExt;
 
 //use dirs::home_dir;
 
@@ -30,6 +34,21 @@ const NOTES_DIR: &str = ".filechest";
 pub struct FileRef {
 	pub file_path: PathBuf,
 	pub inode: u64,
+}
+
+impl FileRef {
+	pub fn from_pathbuf(pb: &PathBuf) -> Self {
+		let file_path = pb.canonicalize().unwrap();
+		println!("Raw {:?} , Canonical: {:?}", pb, file_path);
+		let m = std::fs::symlink_metadata(pb).unwrap();
+		let inode = m.ino();
+		
+		Self { file_path: pb.clone(), inode, }
+	}
+
+	pub fn from_direntry(de: &DirEntry) -> Self {
+		Self { file_path: de.path(), inode: de.ino()}
+	}
 }
 
 pub struct NotesDB {

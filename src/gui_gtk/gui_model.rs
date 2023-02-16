@@ -21,7 +21,6 @@ use crate::file_element::*;
 use file_chest::{FileRef, NotesDB};
 
 use std::fs;
-use std::os::unix::prelude::DirEntryExt;
 
 use gtk::prelude::*;
 use relm4::factory::FactoryVecDeque;
@@ -218,9 +217,7 @@ impl AppModel {
 			paths_vec.sort_by_key(|dir| dir.path());
 
 			for (_i, file) in paths_vec.iter().enumerate() {
-				let file_path = file.path().clone();
-				let inode = file.ino();
-				let fr = FileRef { file_path, inode, };
+				let fr = FileRef::from_direntry(&file);
 				self.tasks.guard().push_back(fr);
 			};
 		}
