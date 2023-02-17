@@ -179,7 +179,9 @@ impl SimpleComponent for AppModel {
 			AppMsg::SubmitNote => {
 				let start = self.notes_buffer.start_iter();
 				let end = self.notes_buffer.end_iter();
-				self.db.set_note(&self.current_file, self.notes_buffer.text(&start, &end, true).as_ref());
+				if let Err(e) = self.db.set_note(&self.current_file, self.notes_buffer.text(&start, &end, true).as_ref()) {
+					eprintln!("Error submitting note {e}");
+				}
 			}
         }
     }
@@ -217,7 +219,7 @@ impl AppModel {
 			paths_vec.sort_by_key(|dir| dir.path());
 
 			for (_i, file) in paths_vec.iter().enumerate() {
-				let fr = FileRef::from_direntry(&file);
+				let fr = FileRef::from_direntry(&file).expect("Tried to create invalid FileRef");
 				self.tasks.guard().push_back(fr);
 			};
 		}

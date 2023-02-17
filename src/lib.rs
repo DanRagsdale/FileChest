@@ -37,17 +37,17 @@ pub struct FileRef {
 }
 
 impl FileRef {
-	pub fn from_pathbuf(pb: &PathBuf) -> Self {
-		let file_path = pb.canonicalize().unwrap();
+	pub fn from_pathbuf(pb: &PathBuf) -> Result<Self, std::io::Error> {
+		let file_path = pb.canonicalize()?;
 		println!("Raw {:?} , Canonical: {:?}", pb, file_path);
-		let m = std::fs::symlink_metadata(pb).unwrap();
+		let m = std::fs::symlink_metadata(pb)?;
 		let inode = m.ino();
 		
-		Self { file_path: pb.clone(), inode, }
+		Ok(Self { file_path: pb.clone(), inode, })
 	}
 
-	pub fn from_direntry(de: &DirEntry) -> Self {
-		Self { file_path: de.path(), inode: de.ino()}
+	pub fn from_direntry(de: &DirEntry) -> Result<Self, std::io::Error> {
+		Ok(Self { file_path: de.path(), inode: de.ino()})
 	}
 }
 
@@ -56,7 +56,7 @@ pub struct NotesDB {
 }
 
 impl NotesDB {
-	pub fn new() -> Result<Self> {
+	pub fn build() -> Result<Self> {
 		let conn = Connection::open("test.db")?;
 		conn.execute(
 			"create table if not exists file_notes (
@@ -92,10 +92,10 @@ impl NotesDB {
 		})
 	}
 
-	pub fn set_note(&self, file_ref: &FileRef, note: &str) {
+	pub fn set_note(&self, file_ref: &FileRef, note: &str) -> Result<(), rusqlite::Error> {
 		self.conn.execute(
         	"INSERT OR REPLACE INTO file_notes (inode, note) VALUES (?1, ?2)",
-        	(&file_ref.inode, note),
-    	).expect("Could not submit note.");
+        	(&file_ref.inode, note),)?;
+		Ok(())
 	}
 }

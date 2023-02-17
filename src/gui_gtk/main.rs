@@ -30,7 +30,7 @@ use relm4::prelude::*;
 
 fn main() {
     let app = RelmApp::new("com.danielragsdale.file_chest");
-	let db = NotesDB::new().expect("Could not load database");
+	let db = NotesDB::build().expect("Could not load database");
 
     app.run::<AppModel>(db);
 }
