@@ -61,7 +61,7 @@ impl SimpleComponent for AppModel {
 						set_hexpand: true,
 					    connect_activate[sender] => move |entry| {
 					        let buffer = entry.buffer();
-					        sender.input(AppMsg::AddDir(buffer.text()));
+					        sender.input(AppMsg::SetDir(buffer.text()));
 					        buffer.delete_text(0, None);
 					    }
 					},
@@ -102,17 +102,25 @@ impl SimpleComponent for AppModel {
 					gtk::ScrolledWindow {
 						set_hscrollbar_policy: gtk::PolicyType::Never,
 						set_min_content_height: 360,
-						set_width_request: 200,
+						set_width_request: 300,
+						set_hexpand: true,
 						set_vexpand: true,
                     
 						#[local_ref]
 						task_list_box -> gtk::ListBox {
+							set_activate_on_single_click: false,
+
 							connect_row_selected[sender] => move |_self, opt| {
 								if opt.is_some() {
 									sender.input(AppMsg::SelectFile(opt.unwrap().index()));
 								};
 							},
-						}
+
+							connect_row_activated[sender] => move |_self, opt| {
+								sender.input(AppMsg::SelectFile(opt.index()));
+								sender.input(AppMsg::SetDirFromSelected)
+							},
+						},
                 	},
 					
 					gtk::Box {
@@ -152,20 +160,25 @@ impl SimpleComponent for AppModel {
                 self.tasks.guard().clear();
 				self.search_dir = String::from("");
             },
-            AppMsg::AddDir(name) => {
-				self.search_dir = name.clone();
+            AppMsg::SetDir(name) => {
+				self.search_dir = name;
 				self.reload_dir();
             },
+			AppMsg::SetDirFromSelected => {
+				self.search_dir = self.current_file.file_path.to_string_lossy().to_string();
+				self.reload_dir();
+			},
 			AppMsg::SetShowHidden(do_show) => {
 				self.show_hidden = do_show;
 				self.reload_dir();
 			},
 			AppMsg::SelectFile(index) => {
-				let fr =  &self.tasks.get(index as usize).unwrap().file;
+				let fr = self.get_fileref_by_index(index as usize).unwrap(); 
+
 				println!("This file has inode: {:?}", fr.inode);
 
 				//let test_string = format!("Test! {}", index);
-				match self.db.get_note(fr) {
+				match self.db.get_note(&fr) {
 					Ok(note) => {
 						self.notes_buffer.set_text(&note);
 					},
@@ -204,6 +217,14 @@ impl SimpleComponent for AppModel {
 }
 
 impl AppModel {
+	fn get_fileref_by_index(&self, index: usize) -> Option<FileRef> {
+		if let Some(fe) = self.tasks.get(index) {
+			return Some(fe.file.clone());
+		};
+
+		None
+	}
+
 	fn reload_dir(&mut self) {
 		self.tasks.guard().clear();
 
