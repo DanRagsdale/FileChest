@@ -163,8 +163,18 @@ impl SimpleComponent for AppModel {
     fn update(&mut self, msg: AppMsg, _sender: ComponentSender<Self>) {
         match msg {
             AppMsg::SetDir(name) => {
-				self.search_dir = name;
-				self.reload_dir();
+				let len = name.len();
+				if len > 4 && &name[0..4] == "tag:" {
+					if let Ok(files) = self.db.get_files_by_tag((&name[4..len]).trim()) {
+						self.tasks.guard().clear();
+						for fr in files {
+							self.tasks.guard().push_back(fr);
+						}
+					}
+				} else {
+					self.search_dir = name;
+					self.reload_dir();
+				}
             },
 			AppMsg::SetDirFromSelected => {
 				self.search_dir = self.current_file.file_path.to_string_lossy().to_string();

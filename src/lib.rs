@@ -15,7 +15,7 @@
  * Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-//use std::fs;
+use std::fs;
 //use std::io::ErrorKind;
 use std::fs::DirEntry;
 use std::path::PathBuf;
@@ -27,8 +27,11 @@ use std::os::unix::fs::DirEntryExt;
 
 use rusqlite::{Connection, Result};
 
+#[cfg(debug_assertions)]
+const FC_DIR: &str = ".filechest";
 
-const NOTES_DIR: &str = ".filechest";
+#[cfg(not(debug_assertions))]
+const FC_DIR: &str = "~/.filechest";
 
 #[derive(Debug, Default, Clone)]
 pub struct FileRef {
@@ -56,8 +59,9 @@ pub struct NotesDB {
 }
 
 impl NotesDB {
-	pub fn build() -> Result<Self> {
-		let conn = Connection::open("test.db")?;
+	pub fn build() -> Result<Self, Box<dyn std::error::Error>> {
+		fs::create_dir_all(FC_DIR)?;
+		let conn = Connection::open(format!("{FC_DIR}/test.db"))?;
 		conn.execute(
 			"CREATE TABLE IF NOT EXISTS file_notes (
 				inode INTEGER PRIMARY KEY,
@@ -171,5 +175,21 @@ impl NotesDB {
 			})?;
 		
 		Ok(tag_iter.map(|t| t.unwrap()).collect())
+	}
+
+	pub fn get_files_by_tag(&self, tag: &str) -> Result<Vec<FileRef>, rusqlite::Error> {
+		let mut stmt = self.conn.prepare(
+			"SELECT file_notes.inode, file_notes.known_path FROM file_notes
+			INNER JOIN tag_relations ON tag_relations.file_id=file_notes.inode
+			INNER JOIN file_tags ON tag_relations.tag_id=file_tags.id
+			WHERE file_tags.tag_name=?1")?;
+		let file_iter = stmt.query_map((tag,), |row| {
+			Ok(FileRef {
+				file_path: PathBuf::from(row.get::<usize, String>(1).unwrap()),
+				inode: row.get(0).unwrap(),
+			})
+		})?;
+
+		Ok(file_iter.map(|t| t.unwrap()).collect())
 	}
 }
