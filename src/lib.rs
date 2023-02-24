@@ -146,8 +146,30 @@ impl NotesDB {
 			"INSERT OR IGNORE INTO tag_relations(tag_id, file_id) VALUES(?1, ?2);",
 			(tag_id, file_ref.inode),
 		)?;
-		println!("{tag_id}");
-		//Add the tag_reference
 		Ok(())
+	}
+
+	pub fn set_tags(&self, file_ref: &FileRef, tags: Vec<&str>) -> Result<(), rusqlite::Error> {
+		self.conn.execute(
+			"DELETE FROM tag_relations WHERE file_id=?1",
+			(file_ref.inode,)
+		)?;
+		
+		for tag in tags {
+			self.add_tag(file_ref, tag)?;
+		};
+		Ok(())
+	}
+
+	pub fn get_tags(&self, file_ref: &FileRef) -> Result<Vec<String>, rusqlite::Error> {
+		let mut stmt = self.conn.prepare(
+			"SELECT file_tags.tag_name FROM file_tags
+			INNER JOIN tag_relations ON tag_relations.tag_id=file_tags.id
+			WHERE tag_relations.file_id=?1")?;
+		let tag_iter = stmt.query_map((file_ref.inode,), |row| {
+				row.get::<usize, String>(0)
+			})?;
+		
+		Ok(tag_iter.map(|t| t.unwrap()).collect())
 	}
 }

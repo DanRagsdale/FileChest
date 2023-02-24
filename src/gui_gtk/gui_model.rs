@@ -187,6 +187,13 @@ impl SimpleComponent for AppModel {
 						self.notes_buffer.set_text("Enter a new note!");
 					},
 				};
+				
+				match self.db.get_tags(&fr) {
+					Ok(tags) => {
+						self.tag_entry_buffer.set_text(&tags.join(", "));
+					},
+					Err(_) => {},
+				};
 
 				self.current_file = fr.clone();
 			},
@@ -198,7 +205,9 @@ impl SimpleComponent for AppModel {
 				}
 			},
 			AppMsg::SubmitTags(tag_string) => {
-				if let Err(e) = self.db.add_tag(&self.current_file, &tag_string) {
+				let tags = tag_string.split(",").map(|t| t.trim()).collect();
+
+				if let Err(e) = self.db.set_tags(&self.current_file, tags) {
 					eprintln!("Error submitting tags {e}");
 				}
 			}
