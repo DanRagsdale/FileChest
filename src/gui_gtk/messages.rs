@@ -23,7 +23,6 @@ pub enum FileElementOutput {}
 
 #[derive(Debug)]
 pub enum AppMsg {
-	DeleteAll,
     SetDir(String),
     SetDirFromSelected,
 	SetShowHidden(bool),

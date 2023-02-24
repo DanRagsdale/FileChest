@@ -31,6 +31,8 @@ pub struct AppModel {
     tasks: FactoryVecDeque<FileElement>,
 	search_dir: String,
 	show_hidden: bool,
+	dir_entry_buffer: gtk::EntryBuffer,
+	tag_entry_buffer: gtk::EntryBuffer,
 	notes_buffer: gtk::TextBuffer,
 	current_file: FileRef,
 }
@@ -58,23 +60,16 @@ impl SimpleComponent for AppModel {
 
 					gtk::Entry {
 						set_placeholder_text: Some("Enter a directory"),
+						set_buffer: &model.dir_entry_buffer,
+
 						set_hexpand: true,
 					    connect_activate[sender] => move |entry| {
 					        let buffer = entry.buffer();
 					        sender.input(AppMsg::SetDir(buffer.text()));
-					        buffer.delete_text(0, None);
+					        //buffer.delete_text(0, None);
 					    }
 					},
 					
-					gtk::Button {
-						set_icon_name: "edit-delete",
-						set_margin_all: 12,
-
-						connect_clicked[sender] => move |_| {
-							sender.input(AppMsg::DeleteAll);
-						}
-					},
-
 					gtk::Box {
 						set_orientation: gtk::Orientation::Vertical,
 						set_margin_all: 2,
@@ -148,6 +143,17 @@ impl SimpleComponent for AppModel {
 								sender.input(AppMsg::SubmitNote);
 							}
 						},
+					
+						gtk::Entry {
+							set_placeholder_text: Some("Enter tags"),
+							set_buffer: &model.tag_entry_buffer,
+
+							set_hexpand: true,
+							connect_activate[sender] => move |entry| {
+					        	let buffer = entry.buffer();
+					        	sender.input(AppMsg::SetDir(buffer.text()));
+							}
+						},
 					}
 				}
             }
@@ -156,10 +162,6 @@ impl SimpleComponent for AppModel {
 
     fn update(&mut self, msg: AppMsg, _sender: ComponentSender<Self>) {
         match msg {
-            AppMsg::DeleteAll => {
-                self.tasks.guard().clear();
-				self.search_dir = String::from("");
-            },
             AppMsg::SetDir(name) => {
 				self.search_dir = name;
 				self.reload_dir();
@@ -167,6 +169,7 @@ impl SimpleComponent for AppModel {
 			AppMsg::SetDirFromSelected => {
 				self.search_dir = self.current_file.file_path.to_string_lossy().to_string();
 				self.reload_dir();
+				self.dir_entry_buffer.set_text(&self.search_dir);
 			},
 			AppMsg::SetShowHidden(do_show) => {
 				self.show_hidden = do_show;
@@ -174,8 +177,6 @@ impl SimpleComponent for AppModel {
 			},
 			AppMsg::SelectFile(index) => {
 				let fr = self.get_fileref_by_index(index as usize).unwrap(); 
-
-				println!("This file has inode: {:?}", fr.inode);
 
 				//let test_string = format!("Test! {}", index);
 				match self.db.get_note(&fr) {
@@ -205,6 +206,8 @@ impl SimpleComponent for AppModel {
             tasks: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()),
 			search_dir: String::from(""),
 			show_hidden: false,
+			dir_entry_buffer: gtk::EntryBuffer::new(Some("")),
+			tag_entry_buffer: gtk::EntryBuffer::new(Some("")),
 			notes_buffer: gtk::TextBuffer::builder().text("Hello World!").build(),
 			current_file: FileRef::default(),
         };
@@ -230,13 +233,17 @@ impl AppModel {
 
 		if let Ok(paths) = fs::read_dir(&self.search_dir)
 		{
-			let mut paths_vec: Vec<_> = vec![];
-			for p in paths {
-				let file = p.unwrap();
-				if self.show_hidden || file.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
-					paths_vec.push(file);
-				}
-			}
+			let mut paths_vec: Vec<std::fs::DirEntry> = paths
+				.map(|p| p.unwrap())
+				.filter(|f| self.show_hidden || f.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 )
+				.collect();
+			//let mut paths_vec: Vec<_> = vec![];
+			//for p in paths {
+			//	let file = p.unwrap();
+			//	if self.show_hidden || f.file_name().into_string().unwrap().as_bytes()[0] != '.' as u8 {
+			//		paths_vec.push(file);
+			//	}
+			//}
 			paths_vec.sort_by_key(|dir| dir.path());
 
 			for (_i, file) in paths_vec.iter().enumerate() {

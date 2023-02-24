@@ -38,8 +38,8 @@ pub struct FileRef {
 
 impl FileRef {
 	pub fn from_pathbuf(pb: &PathBuf) -> Result<Self, std::io::Error> {
-		let file_path = pb.canonicalize()?;
-		println!("Raw {:?} , Canonical: {:?}", pb, file_path);
+		//let file_path = pb.canonicalize()?;
+		//println!("Raw {:?} , Canonical: {:?}", pb, file_path);
 		let m = std::fs::symlink_metadata(pb)?;
 		let inode = m.ino();
 		
@@ -59,10 +59,31 @@ impl NotesDB {
 	pub fn build() -> Result<Self> {
 		let conn = Connection::open("test.db")?;
 		conn.execute(
-			"create table if not exists file_notes (
-			     inode integer primary key,
-			     note text
-			)",
+			"CREATE TABLE IF NOT EXISTS file_notes (
+				inode INTEGER PRIMARY KEY,
+				known_path TEXT,
+				note TEXT
+			);",
+			()
+		)?;
+		
+		conn.execute(
+			"CREATE TABLE IF NOT EXISTS file_tags (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				tag_name VARCHAR(255)
+			);",
+			()
+		)?;
+
+		conn.execute(
+			"CREATE TABLE IF NOT EXISTS tag_relations (
+				relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				tag_id INTEGER NOT NULL,
+				file_id INTEGER NOT NULL,
+
+				FOREIGN KEY(tag_id) REFERENCES file_tags(id),	
+				FOREIGN KEY(file_id) REFERENCES file_notes(inode)	
+			);",
 			()
 		)?;
 
@@ -72,30 +93,24 @@ impl NotesDB {
 	}
 
 	pub fn get_note(&self, file_ref: &FileRef) -> Result<String, rusqlite::Error> {
-		//let test_path = home_dir().unwrap().display().to_string() + "/" + NOTES_DIR;
-		//let dir_create = fs::create_dir(test_path);
-		//match dir_create {
-		//	Ok(_) => (),
-		//	Err(error) => if error.kind() !=  ErrorKind::AlreadyExists {
-		//		println!("{:?}", error);
-		//	},
-		//};
+		self.conn.execute(
+			"UPDATE file_notes SET known_path = ?1 WHERE inode = ?2;",
+			(file_ref.file_path.to_str().unwrap(), &file_ref.inode)
+		)?;
 
-		//if let Ok(c_path) = fs::canonicalize(file_path){
-		//	let inode = file.ino();
-
-		//	//println!("{:?}", c_path);
-		//	return Some(format!("These are the notes for {}:\n", c_path.display()));
-		//}
-		self.conn.query_row("SELECT note FROM file_notes WHERE inode=:inode", &[(":inode", &file_ref.inode.to_string())], |row| {
+		self.get_note_no_update(file_ref)
+	}
+	
+	pub fn get_note_no_update(&self, file_ref: &FileRef) -> Result<String, rusqlite::Error> {
+		self.conn.query_row("SELECT note FROM file_notes WHERE inode=:inode;", &[(":inode", &file_ref.inode.to_string())], |row| {
 			row.get::<usize, String>(0)
 		})
 	}
 
 	pub fn set_note(&self, file_ref: &FileRef, note: &str) -> Result<(), rusqlite::Error> {
 		self.conn.execute(
-        	"INSERT OR REPLACE INTO file_notes (inode, note) VALUES (?1, ?2)",
-        	(&file_ref.inode, note),)?;
+        	"INSERT OR REPLACE INTO file_notes (inode, known_path, note) VALUES (?1, ?2, ?3);",
+        	(&file_ref.inode, file_ref.file_path.to_str().unwrap(), note),)?;
 		Ok(())
 	}
 }
