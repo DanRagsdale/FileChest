@@ -70,19 +70,21 @@ impl NotesDB {
 		conn.execute(
 			"CREATE TABLE IF NOT EXISTS file_tags (
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				tag_name VARCHAR(255)
+				tag_name VARCHAR(255) UNIQUE
 			);",
 			()
 		)?;
 
 		conn.execute(
 			"CREATE TABLE IF NOT EXISTS tag_relations (
-				relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+				--relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
 				tag_id INTEGER NOT NULL,
 				file_id INTEGER NOT NULL,
 
 				FOREIGN KEY(tag_id) REFERENCES file_tags(id),	
-				FOREIGN KEY(file_id) REFERENCES file_notes(inode)	
+				FOREIGN KEY(file_id) REFERENCES file_notes(inode),
+
+				CONSTRAINT uc_tfid UNIQUE (tag_id, file_id)
 			);",
 			()
 		)?;
@@ -102,15 +104,50 @@ impl NotesDB {
 	}
 	
 	pub fn get_note_no_update(&self, file_ref: &FileRef) -> Result<String, rusqlite::Error> {
-		self.conn.query_row("SELECT note FROM file_notes WHERE inode=:inode;", &[(":inode", &file_ref.inode.to_string())], |row| {
-			row.get::<usize, String>(0)
-		})
+		self.conn.query_row(
+			"SELECT note FROM file_notes WHERE inode=?1;",
+			(file_ref.inode,),
+			|row| { row.get::<usize, String>(0)}
+		)
 	}
 
 	pub fn set_note(&self, file_ref: &FileRef, note: &str) -> Result<(), rusqlite::Error> {
 		self.conn.execute(
-        	"INSERT OR REPLACE INTO file_notes (inode, known_path, note) VALUES (?1, ?2, ?3);",
-        	(&file_ref.inode, file_ref.file_path.to_str().unwrap(), note),)?;
+        	"INSERT OR REPLACE INTO file_notes(inode, known_path, note) VALUES(?1, ?2, ?3);",
+        	(file_ref.inode, file_ref.file_path.to_str().unwrap(), note, ),
+		)?;
+		Ok(())
+	}
+
+	pub fn add_file(&self, file_ref: &FileRef) -> Result<(), rusqlite::Error> {
+		self.conn.execute(
+			"INSERT OR IGNORE INTO file_notes(inode, known_path) VALUES(?1, ?2);",
+			(file_ref.inode, file_ref.file_path.to_str().unwrap(), )
+		)?;
+		Ok(())
+	}
+
+	pub fn add_tag(&self, file_ref: &FileRef, tag: &str) -> Result<(), rusqlite::Error> {
+		//Check if we have a corresponding tag in the tags table. Add the new tag if we don't.
+		self.conn.execute(
+			"INSERT OR IGNORE INTO file_tags(tag_name) VALUES(?1);",
+			(tag,),
+		)?;
+		
+		let tag_id = self.conn.query_row(
+			"SELECT id FROM file_tags WHERE tag_name=?1",
+			(tag,),
+			|row| { row.get::<usize, usize>(0)}
+		)?;
+
+		self.add_file(file_ref)?;
+
+		self.conn.execute(
+			"INSERT OR IGNORE INTO tag_relations(tag_id, file_id) VALUES(?1, ?2);",
+			(tag_id, file_ref.inode),
+		)?;
+		println!("{tag_id}");
+		//Add the tag_reference
 		Ok(())
 	}
 }

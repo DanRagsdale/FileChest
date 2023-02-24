@@ -28,4 +28,5 @@ pub enum AppMsg {
 	SetShowHidden(bool),
 	SelectFile(i32),
 	SubmitNote,
+	SubmitTags(String),
 }

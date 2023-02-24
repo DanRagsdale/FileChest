@@ -151,7 +151,7 @@ impl SimpleComponent for AppModel {
 							set_hexpand: true,
 							connect_activate[sender] => move |entry| {
 					        	let buffer = entry.buffer();
-					        	sender.input(AppMsg::SetDir(buffer.text()));
+					        	sender.input(AppMsg::SubmitTags(buffer.text()));
 							}
 						},
 					}
@@ -195,6 +195,11 @@ impl SimpleComponent for AppModel {
 				let end = self.notes_buffer.end_iter();
 				if let Err(e) = self.db.set_note(&self.current_file, self.notes_buffer.text(&start, &end, true).as_ref()) {
 					eprintln!("Error submitting note {e}");
+				}
+			},
+			AppMsg::SubmitTags(tag_string) => {
+				if let Err(e) = self.db.add_tag(&self.current_file, &tag_string) {
+					eprintln!("Error submitting tags {e}");
 				}
 			}
         }
