@@ -46,6 +46,7 @@ impl FactoryComponent for FileElement {
                 set_hexpand: true,
                 set_halign: gtk::Align::Start,
                 set_margin_all: 12,
+				//set_selectable: true,
             },
         }
     }

@@ -23,12 +23,14 @@ use file_chest::{FileRef, NotesDB};
 use std::fs;
 
 use gtk::prelude::*;
+
 use relm4::factory::FactoryVecDeque;
 use relm4::prelude::*;
 
+
 pub struct AppModel {
 	db: NotesDB,
-    tasks: FactoryVecDeque<FileElement>,
+    file_elements: FactoryVecDeque<FileElement>,
 	search_dir: String,
 	show_hidden: bool,
 	dir_entry_buffer: gtk::EntryBuffer,
@@ -69,7 +71,7 @@ impl SimpleComponent for AppModel {
 					        //buffer.delete_text(0, None);
 					    }
 					},
-					
+
 					gtk::Box {
 						set_orientation: gtk::Orientation::Vertical,
 						set_margin_all: 2,
@@ -85,7 +87,8 @@ impl SimpleComponent for AppModel {
 
 						gtk::Label {
 							set_text: "Show Hidden Files",
-						}
+						},
+						
 					}
 				},
 
@@ -94,30 +97,36 @@ impl SimpleComponent for AppModel {
 					set_margin_all: 6,
 					set_spacing: 6,
 
-					gtk::ScrolledWindow {
-						set_hscrollbar_policy: gtk::PolicyType::Never,
-						set_min_content_height: 360,
-						set_width_request: 300,
-						set_hexpand: true,
-						set_vexpand: true,
-                    
+					#[local_ref]
+					click_box -> gtk::Box{
 						#[local_ref]
-						task_list_box -> gtk::ListBox {
-							set_activate_on_single_click: false,
+						p_menu -> gtk::PopoverMenu {},
 
-							connect_row_selected[sender] => move |_self, opt| {
-								if opt.is_some() {
-									sender.input(AppMsg::SelectFile(opt.unwrap().index()));
-								};
-							},
+						gtk::ScrolledWindow {
+							set_hscrollbar_policy: gtk::PolicyType::Never,
+							set_min_content_height: 360,
+							set_width_request: 300,
+							set_hexpand: true,
+							set_vexpand: true,
+						
+							#[local_ref]
+							files_list -> gtk::ListBox {
+								set_activate_on_single_click: false,
 
-							connect_row_activated[sender] => move |_self, opt| {
-								sender.input(AppMsg::SelectFile(opt.index()));
-								sender.input(AppMsg::SetDirFromSelected)
+								connect_row_selected[sender] => move |_self, opt| {
+									if opt.is_some() {
+										sender.input(AppMsg::SelectFile(opt.unwrap().index()));
+									};
+								},
+
+								connect_row_activated[sender] => move |_self, opt| {
+									sender.input(AppMsg::SelectFile(opt.index()));
+									sender.input(AppMsg::SetDirFromSelected)
+								},
 							},
 						},
-                	},
-					
+					},
+
 					gtk::Box {
 						set_orientation: gtk::Orientation::Vertical,
 						set_margin_all: 6,
@@ -152,7 +161,7 @@ impl SimpleComponent for AppModel {
 							connect_activate[sender] => move |entry| {
 					        	let buffer = entry.buffer();
 					        	sender.input(AppMsg::SubmitTags(buffer.text()));
-							}
+							},
 						},
 					}
 				}
@@ -166,9 +175,9 @@ impl SimpleComponent for AppModel {
 				let len = name.len();
 				if len > 4 && &name[0..4] == "tag:" {
 					if let Ok(files) = self.db.get_files_by_tag((&name[4..len]).trim()) {
-						self.tasks.guard().clear();
+						self.file_elements.guard().clear();
 						for fr in files {
-							self.tasks.guard().push_back(fr);
+							self.file_elements.guard().push_back(fr);
 						}
 					}
 				} else {
@@ -225,9 +234,18 @@ impl SimpleComponent for AppModel {
     }
 
     fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
+		let menu_list = gtk::gio::Menu::new();
+		menu_list.append(Some("Test"), None);
+
+		//let p_menu = gtk::PopoverMenu::from_model(Some(&menu_list));
+		let p_menu = gtk::PopoverMenu::builder()
+			.menu_model(&menu_list)
+			.has_arrow(false)
+			.width_request(100).build();
+
         let model = AppModel {
 			db,
-            tasks: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()),
+            file_elements: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()),
 			search_dir: String::from(""),
 			show_hidden: false,
 			dir_entry_buffer: gtk::EntryBuffer::new(Some("")),
@@ -236,8 +254,35 @@ impl SimpleComponent for AppModel {
 			current_file: FileRef::default(),
         };
 
-        let task_list_box = model.tasks.widget();
+        let files_list = model.file_elements.widget();
+		//files_list.prepend(&p_menu);
+
+		let click_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+
         let widgets = view_output!();
+
+
+
+		// Create a click gesture
+		let gesture = gtk::GestureClick::new();
+
+		// Set the gestures button to the right mouse button (=3)
+		gesture.set_button(gtk::gdk::ffi::GDK_BUTTON_SECONDARY as u32);
+
+		// Assign your handler to an event of the gesture (e.g. the `pressed` event)
+		gesture.connect_pressed(move |gesture, n, x, y| {
+		    gesture.set_state(gtk::EventSequenceState::Claimed);
+			//p_menu.set_offset(x as i32, y as i32);
+			//p_menu.set_position(gtk::PositionType::Right);
+			p_menu.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 100, 0)));
+
+			p_menu.popup();
+		    println!("ListBox: Right mouse button pressed!");
+		    println!("{n}, {x}, {y}");
+		});
+
+		click_box.add_controller(&gesture);
+
 
         ComponentParts { model, widgets }
     }
@@ -245,7 +290,7 @@ impl SimpleComponent for AppModel {
 
 impl AppModel {
 	fn get_fileref_by_index(&self, index: usize) -> Option<FileRef> {
-		if let Some(fe) = self.tasks.get(index) {
+		if let Some(fe) = self.file_elements.get(index) {
 			return Some(fe.file.clone());
 		};
 
@@ -253,7 +298,7 @@ impl AppModel {
 	}
 
 	fn reload_dir(&mut self) {
-		self.tasks.guard().clear();
+		self.file_elements.guard().clear();
 
 		if let Ok(paths) = fs::read_dir(&self.search_dir)
 		{
@@ -272,7 +317,7 @@ impl AppModel {
 
 			for (_i, file) in paths_vec.iter().enumerate() {
 				let fr = FileRef::from_direntry(&file).expect("Tried to create invalid FileRef");
-				self.tasks.guard().push_back(fr);
+				self.file_elements.guard().push_back(fr);
 			};
 		}
 	}
