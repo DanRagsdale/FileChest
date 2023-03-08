@@ -28,7 +28,6 @@ use gtk::prelude::*;
 use relm4::factory::FactoryVecDeque;
 use relm4::prelude::*;
 
-
 pub struct AppModel {
 	db: NotesDB,
     file_elements: FactoryVecDeque<FileElement>,
@@ -241,34 +240,35 @@ impl SimpleComponent for AppModel {
 				}
 			},
 			AppMsg::ShowFileContext(x, y) => {
-				//self.p_menu.set_offset(x as i32, y as i32);
-				//self.p_menu.set_position(gtk::PositionType::Right);
 				if let Some(_) = &self.current_file {
 					self.p_menu.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 100, 0)));
 					self.p_menu.popup();
 				}
-
-				println!("ListBox: Right mouse button pressed!");
-				println!("{x}, {y}");
 			},
-			AppMsg::OpenCurrentFile => {
+			AppMsg::OpenCurrentFile(open_type) => {
 				if let Some(cur_file) = &self.current_file {
-					let path = cur_file.file_path.to_str().expect("Could not unwrap file path");
-					Command::new("xdg-open").arg(path).output().expect("Failed to open file");
+					match open_type {
+						OpenType::OpenFile => {
+							let path = cur_file.file_path.to_str().expect("Could not unwrap file path");
+							Command::new("xdg-open").arg(path).output().expect("Failed to open file");
+						},
+						OpenType::OpenParent => {
+							if let Some(parent_path) = cur_file.file_path.parent() {
+								let path = parent_path.to_str().expect("Could not unwrap file path");
+								Command::new("xdg-open").arg(path).output().expect("Failed to open file");
+							}
+						}
+					}
 				}
 			},
-			AppMsg::ViewCurrentFile => {},
         }
     }
 
     fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
 		let menu_list = gtk::gio::Menu::new();
 		menu_list.append(Some("Open File"), Some("win.action_open"));
-		menu_list.append(Some("View in Browser"), Some("win.action_view"));
-		
-		//menu_list.add_action(&action_close);
+		menu_list.append(Some("Open Parent Directory"), Some("win.action_view"));
 
-		//let p_menu = gtk::PopoverMenu::from_model(Some(&menu_list));
 		let p_menu = gtk::PopoverMenu::builder()
 			.menu_model(&menu_list)
 			.has_arrow(false)
@@ -286,13 +286,19 @@ impl SimpleComponent for AppModel {
 			p_menu: p_menu.clone(),
         };
 
-		let test_sender = sender.clone();
+		let open_sender = sender.clone();
 		let action_open = gtk::gio::SimpleAction::new("action_open", None);
 		action_open.connect_activate(move |_, _| {
-			test_sender.input(AppMsg::OpenCurrentFile);
-			println!("Test Open!!!!");
+			open_sender.input(AppMsg::OpenCurrentFile(OpenType::OpenFile));
 		});
 		root.add_action(&action_open);
+		
+		let view_sender = sender.clone();
+		let action_view = gtk::gio::SimpleAction::new("action_view", None);
+		action_view.connect_activate(move |_, _| {
+			view_sender.input(AppMsg::OpenCurrentFile(OpenType::OpenParent));
+		});
+		root.add_action(&action_view);
 
 
 
