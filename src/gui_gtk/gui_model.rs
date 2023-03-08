@@ -21,6 +21,7 @@ use crate::file_element::*;
 use file_chest::{FileRef, NotesDB};
 
 use std::fs;
+use std::process::Command;
 
 use gtk::prelude::*;
 
@@ -250,13 +251,22 @@ impl SimpleComponent for AppModel {
 				println!("ListBox: Right mouse button pressed!");
 				println!("{x}, {y}");
 			},
+			AppMsg::OpenCurrentFile => {
+				if let Some(cur_file) = &self.current_file {
+					let path = cur_file.file_path.to_str().expect("Could not unwrap file path");
+					Command::new("xdg-open").arg(path).output().expect("Failed to open file");
+				}
+			},
+			AppMsg::ViewCurrentFile => {},
         }
     }
 
     fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
 		let menu_list = gtk::gio::Menu::new();
-		menu_list.append(Some("Open File"), None);
-		menu_list.append(Some("View in Browser"), None);
+		menu_list.append(Some("Open File"), Some("win.action_open"));
+		menu_list.append(Some("View in Browser"), Some("win.action_view"));
+		
+		//menu_list.add_action(&action_close);
 
 		//let p_menu = gtk::PopoverMenu::from_model(Some(&menu_list));
 		let p_menu = gtk::PopoverMenu::builder()
@@ -276,6 +286,16 @@ impl SimpleComponent for AppModel {
 			p_menu: p_menu.clone(),
         };
 
+		let test_sender = sender.clone();
+		let action_open = gtk::gio::SimpleAction::new("action_open", None);
+		action_open.connect_activate(move |_, _| {
+			test_sender.input(AppMsg::OpenCurrentFile);
+			println!("Test Open!!!!");
+		});
+		root.add_action(&action_open);
+
+
+
         let files_list = model.file_elements.widget();
 		let click_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
 
@@ -289,6 +309,7 @@ impl SimpleComponent for AppModel {
 			sender.input(AppMsg::ShowFileContext(x, y));
 		});
 		click_box.add_controller(&gesture);
+
 
 		ComponentParts { model, widgets }
     }

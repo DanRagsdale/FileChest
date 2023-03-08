@@ -30,4 +30,6 @@ pub enum AppMsg {
 	SubmitNote,
 	SubmitTags(String),
 	ShowFileContext(f64, f64),
+	OpenCurrentFile,
+	ViewCurrentFile,
 }
