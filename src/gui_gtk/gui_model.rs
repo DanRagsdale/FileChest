@@ -36,7 +36,8 @@ pub struct AppModel {
 	dir_entry_buffer: gtk::EntryBuffer,
 	tag_entry_buffer: gtk::EntryBuffer,
 	notes_buffer: gtk::TextBuffer,
-	current_file: FileRef,
+	current_file: Option<FileRef>,
+	p_menu: gtk::PopoverMenu,
 }
 
 #[relm4::component(pub)]
@@ -186,9 +187,11 @@ impl SimpleComponent for AppModel {
 				}
             },
 			AppMsg::SetDirFromSelected => {
-				self.search_dir = self.current_file.file_path.to_string_lossy().to_string();
-				self.reload_dir();
-				self.dir_entry_buffer.set_text(&self.search_dir);
+				if let Some(file) = &self.current_file {
+					self.search_dir = file.file_path.to_string_lossy().to_string();
+					self.reload_dir();
+					self.dir_entry_buffer.set_text(&self.search_dir);
+				}
 			},
 			AppMsg::SetShowHidden(do_show) => {
 				self.show_hidden = do_show;
@@ -214,28 +217,46 @@ impl SimpleComponent for AppModel {
 					Err(_) => {},
 				};
 
-				self.current_file = fr.clone();
+				self.current_file = Some(fr.clone());
 			},
 			AppMsg::SubmitNote => {
-				let start = self.notes_buffer.start_iter();
-				let end = self.notes_buffer.end_iter();
-				if let Err(e) = self.db.set_note(&self.current_file, self.notes_buffer.text(&start, &end, true).as_ref()) {
-					eprintln!("Error submitting note {e}");
+				if let Some(file) = &self.current_file {
+					let start = self.notes_buffer.start_iter();
+					let end = self.notes_buffer.end_iter();
+					if let Err(e) = self.db.set_note(file, self.notes_buffer.text(&start, &end, true).as_ref()) {
+						eprintln!("Error submitting note {e}");
+					}
 				}
 			},
 			AppMsg::SubmitTags(tag_string) => {
-				let tags = tag_string.split(",").map(|t| t.trim()).collect();
-
-				if let Err(e) = self.db.set_tags(&self.current_file, tags) {
-					eprintln!("Error submitting tags {e}");
+				if self.current_file.is_some() {
+					let tags = tag_string.split(",").map(|t| t.trim()).collect();
+					
+					if let Some(file) = &self.current_file {
+						if let Err(e) = self.db.set_tags(file, tags) {
+							eprintln!("Error submitting tags {e}");
+						}
+					}
 				}
-			}
+			},
+			AppMsg::ShowFileContext(x, y) => {
+				//self.p_menu.set_offset(x as i32, y as i32);
+				//self.p_menu.set_position(gtk::PositionType::Right);
+				if let Some(_) = &self.current_file {
+					self.p_menu.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 100, 0)));
+					self.p_menu.popup();
+				}
+
+				println!("ListBox: Right mouse button pressed!");
+				println!("{x}, {y}");
+			},
         }
     }
 
     fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
 		let menu_list = gtk::gio::Menu::new();
-		menu_list.append(Some("Test"), None);
+		menu_list.append(Some("Open File"), None);
+		menu_list.append(Some("View in Browser"), None);
 
 		//let p_menu = gtk::PopoverMenu::from_model(Some(&menu_list));
 		let p_menu = gtk::PopoverMenu::builder()
@@ -251,40 +272,25 @@ impl SimpleComponent for AppModel {
 			dir_entry_buffer: gtk::EntryBuffer::new(Some("")),
 			tag_entry_buffer: gtk::EntryBuffer::new(Some("")),
 			notes_buffer: gtk::TextBuffer::builder().text("Hello World!").build(),
-			current_file: FileRef::default(),
+			current_file: None,
+			p_menu: p_menu.clone(),
         };
 
         let files_list = model.file_elements.widget();
-		//files_list.prepend(&p_menu);
-
 		let click_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
 
         let widgets = view_output!();
 
-
-
-		// Create a click gesture
+		// Right Click handler for opening and viewing files
 		let gesture = gtk::GestureClick::new();
-
-		// Set the gestures button to the right mouse button (=3)
 		gesture.set_button(gtk::gdk::ffi::GDK_BUTTON_SECONDARY as u32);
-
-		// Assign your handler to an event of the gesture (e.g. the `pressed` event)
-		gesture.connect_pressed(move |gesture, n, x, y| {
+		gesture.connect_pressed(move |gesture, _n, x, y| {
 		    gesture.set_state(gtk::EventSequenceState::Claimed);
-			//p_menu.set_offset(x as i32, y as i32);
-			//p_menu.set_position(gtk::PositionType::Right);
-			p_menu.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 100, 0)));
-
-			p_menu.popup();
-		    println!("ListBox: Right mouse button pressed!");
-		    println!("{n}, {x}, {y}");
+			sender.input(AppMsg::ShowFileContext(x, y));
 		});
-
 		click_box.add_controller(&gesture);
 
-
-        ComponentParts { model, widgets }
+		ComponentParts { model, widgets }
     }
 }
 

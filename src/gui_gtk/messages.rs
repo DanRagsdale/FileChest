@@ -29,4 +29,5 @@ pub enum AppMsg {
 	SelectFile(i32),
 	SubmitNote,
 	SubmitTags(String),
+	ShowFileContext(f64, f64),
 }
