@@ -39,13 +39,23 @@ impl FactoryComponent for FileElement {
     view! {
         gtk::Box {
             set_orientation: gtk::Orientation::Horizontal,
-            
+
+			gtk::Image {
+				set_icon_name: {
+					if self.file.file_path.is_dir() {
+						Some("folder")
+					} else {
+						Some("text-x-generic")
+					}
+				},
+			},
+
 			#[name(label)]
             gtk::Label {
                 set_label: &self.file.file_path.file_name().unwrap().to_str().unwrap(),
                 set_hexpand: true,
                 set_halign: gtk::Align::Start,
-                set_margin_all: 12,
+                set_margin_all: 2,
 				//set_selectable: true,
             },
         }

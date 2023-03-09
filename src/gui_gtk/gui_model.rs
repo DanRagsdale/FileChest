@@ -268,7 +268,6 @@ impl SimpleComponent for AppModel {
     }
 
     fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
-
 		// Right Click Menus
 		let menu_list = gtk::gio::Menu::new();
 		menu_list.append(Some("Open File"), Some("win.action_open"));
@@ -314,7 +313,7 @@ impl SimpleComponent for AppModel {
 			show_hidden: false,
 			dir_entry_buffer: gtk::EntryBuffer::new(Some("")),
 			tag_entry_buffer: gtk::EntryBuffer::new(Some("")),
-			notes_buffer: gtk::TextBuffer::builder().text("Hello World!").build(),
+			notes_buffer: gtk::TextBuffer::builder().text("").build(),
 			current_file: None,
 			
 			view_file_context: view_file_context.clone(),
