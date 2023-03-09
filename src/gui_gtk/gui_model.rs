@@ -37,7 +37,7 @@ pub struct AppModel {
 	tag_entry_buffer: gtk::EntryBuffer,
 	notes_buffer: gtk::TextBuffer,
 	current_file: Option<FileRef>,
-	p_menu: gtk::PopoverMenu,
+	view_file_context: gtk::PopoverMenu,
 }
 
 #[relm4::component(pub)]
@@ -99,9 +99,9 @@ impl SimpleComponent for AppModel {
 					set_spacing: 6,
 
 					#[local_ref]
-					click_box -> gtk::Box{
+					view_click_box -> gtk::Box{
 						#[local_ref]
-						p_menu -> gtk::PopoverMenu {},
+						view_file_context -> gtk::PopoverMenu {},
 
 						gtk::ScrolledWindow {
 							set_hscrollbar_policy: gtk::PolicyType::Never,
@@ -111,7 +111,7 @@ impl SimpleComponent for AppModel {
 							set_vexpand: true,
 						
 							#[local_ref]
-							files_list -> gtk::ListBox {
+							view_files_list -> gtk::ListBox {
 								set_activate_on_single_click: false,
 
 								connect_row_selected[sender] => move |_self, opt| {
@@ -172,6 +172,7 @@ impl SimpleComponent for AppModel {
 
     fn update(&mut self, msg: AppMsg, _sender: ComponentSender<Self>) {
         match msg {
+			// Set the currently displayed search directory or current tag search
             AppMsg::SetDir(name) => {
 				let len = name.len();
 				if len > 4 && &name[0..4] == "tag:" {
@@ -186,6 +187,7 @@ impl SimpleComponent for AppModel {
 					self.reload_dir();
 				}
             },
+			// Set the currently displayed directory after double clicking on a file
 			AppMsg::SetDirFromSelected => {
 				if let Some(file) = &self.current_file {
 					self.search_dir = file.file_path.to_string_lossy().to_string();
@@ -197,10 +199,10 @@ impl SimpleComponent for AppModel {
 				self.show_hidden = do_show;
 				self.reload_dir();
 			},
+			//Update the UI to reflect a newly selected file
 			AppMsg::SelectFile(index) => {
 				let fr = self.get_fileref_by_index(index as usize).unwrap(); 
 
-				//let test_string = format!("Test! {}", index);
 				match self.db.get_note(&fr) {
 					Ok(note) => {
 						self.notes_buffer.set_text(&note);
@@ -208,17 +210,18 @@ impl SimpleComponent for AppModel {
 					Err(_) => {
 						self.notes_buffer.set_text("Enter a new note!");
 					},
-				};
+				}
 				
 				match self.db.get_tags(&fr) {
 					Ok(tags) => {
 						self.tag_entry_buffer.set_text(&tags.join(", "));
 					},
 					Err(_) => {},
-				};
+				}
 
 				self.current_file = Some(fr.clone());
 			},
+			// Submit notes for the currently selected file to the rusqlite database
 			AppMsg::SubmitNote => {
 				if let Some(file) = &self.current_file {
 					let start = self.notes_buffer.start_iter();
@@ -228,95 +231,98 @@ impl SimpleComponent for AppModel {
 					}
 				}
 			},
+			// Submit tags for the currently selected file to the rusqlite database
 			AppMsg::SubmitTags(tag_string) => {
-				if self.current_file.is_some() {
+				if let Some(file) = &self.current_file {
 					let tags = tag_string.split(",").map(|t| t.trim()).collect();
-					
-					if let Some(file) = &self.current_file {
-						if let Err(e) = self.db.set_tags(file, tags) {
-							eprintln!("Error submitting tags {e}");
-						}
+
+					if let Err(e) = self.db.set_tags(file, tags) {
+						eprintln!("Error submitting tags {e}");
 					}
 				}
 			},
+			// Show the right click menu for the selected file
 			AppMsg::ShowFileContext(x, y) => {
-				if let Some(_) = &self.current_file {
-					self.p_menu.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 100, 0)));
-					self.p_menu.popup();
+				if self.current_file.is_some() {
+					self.view_file_context.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 100, 0)));
+					self.view_file_context.popup();
 				}
 			},
+			// Open or view the currently selected file
 			AppMsg::OpenCurrentFile(open_type) => {
-				if let Some(cur_file) = &self.current_file {
-					match open_type {
-						OpenType::OpenFile => {
-							let path = cur_file.file_path.to_str().expect("Could not unwrap file path");
+				match (open_type, &self.current_file) {
+					(OpenType::OpenFile, Some(cur_file)) => {
+						let path = cur_file.file_path.to_str().expect("Could not unwrap file path");
+						Command::new("xdg-open").arg(path).output().expect("Failed to open file");
+					},
+					(OpenType::OpenParent, Some(cur_file)) => {
+						if let Some(parent_path) = cur_file.file_path.parent() {
+							let path = parent_path.to_str().expect("Could not unwrap file path");
 							Command::new("xdg-open").arg(path).output().expect("Failed to open file");
-						},
-						OpenType::OpenParent => {
-							if let Some(parent_path) = cur_file.file_path.parent() {
-								let path = parent_path.to_str().expect("Could not unwrap file path");
-								Command::new("xdg-open").arg(path).output().expect("Failed to open file");
-							}
 						}
-					}
+					},
+					(_,_) => {},
 				}
 			},
         }
     }
 
     fn init(db: Self::Init, root: &Self::Root, sender: ComponentSender<Self>) -> ComponentParts<Self> {
+
+		// Right Click Menus
 		let menu_list = gtk::gio::Menu::new();
 		menu_list.append(Some("Open File"), Some("win.action_open"));
 		menu_list.append(Some("Open Parent Directory"), Some("win.action_view"));
 
-		let p_menu = gtk::PopoverMenu::builder()
+		let view_file_context = gtk::PopoverMenu::builder()
 			.menu_model(&menu_list)
 			.has_arrow(false)
 			.width_request(100).build();
 
-        let model = AppModel {
+		// Right click menu actions
+		let sender_open = sender.clone();
+		let action_open = gtk::gio::SimpleAction::new("action_open", None);
+		action_open.connect_activate(move |_, _| {
+			sender_open.input(AppMsg::OpenCurrentFile(OpenType::OpenFile));
+		});
+		root.add_action(&action_open);
+		
+		let sender_view = sender.clone();
+		let action_view = gtk::gio::SimpleAction::new("action_view", None);
+		action_view.connect_activate(move |_, _| {
+			sender_view.input(AppMsg::OpenCurrentFile(OpenType::OpenParent));
+		});
+		root.add_action(&action_view);
+
+		// Right Click handler for opening and viewing files
+		let view_click_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+
+		let sender_gesture = sender.clone();
+		let gesture = gtk::GestureClick::new();
+		gesture.set_button(gtk::gdk::ffi::GDK_BUTTON_SECONDARY as u32);
+		gesture.connect_pressed(move |gesture, _n, x, y| {
+		    gesture.set_state(gtk::EventSequenceState::Claimed);
+			sender_gesture.input(AppMsg::ShowFileContext(x, y));
+		});
+		view_click_box.add_controller(&gesture);
+
+		// App Model
+		let model = AppModel {
 			db,
-            file_elements: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()),
+            file_elements: FactoryVecDeque::new(gtk::ListBox::default(), sender.input_sender()), 
 			search_dir: String::from(""),
 			show_hidden: false,
 			dir_entry_buffer: gtk::EntryBuffer::new(Some("")),
 			tag_entry_buffer: gtk::EntryBuffer::new(Some("")),
 			notes_buffer: gtk::TextBuffer::builder().text("Hello World!").build(),
 			current_file: None,
-			p_menu: p_menu.clone(),
+			
+			view_file_context: view_file_context.clone(),
         };
 
-		let open_sender = sender.clone();
-		let action_open = gtk::gio::SimpleAction::new("action_open", None);
-		action_open.connect_activate(move |_, _| {
-			open_sender.input(AppMsg::OpenCurrentFile(OpenType::OpenFile));
-		});
-		root.add_action(&action_open);
-		
-		let view_sender = sender.clone();
-		let action_view = gtk::gio::SimpleAction::new("action_view", None);
-		action_view.connect_activate(move |_, _| {
-			view_sender.input(AppMsg::OpenCurrentFile(OpenType::OpenParent));
-		});
-		root.add_action(&action_view);
-
-
-
-        let files_list = model.file_elements.widget();
-		let click_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        let view_files_list: &gtk::ListBox = model.file_elements.widget();
 
         let widgets = view_output!();
-
-		// Right Click handler for opening and viewing files
-		let gesture = gtk::GestureClick::new();
-		gesture.set_button(gtk::gdk::ffi::GDK_BUTTON_SECONDARY as u32);
-		gesture.connect_pressed(move |gesture, _n, x, y| {
-		    gesture.set_state(gtk::EventSequenceState::Claimed);
-			sender.input(AppMsg::ShowFileContext(x, y));
-		});
-		click_box.add_controller(&gesture);
-
-
 		ComponentParts { model, widgets }
     }
 }
